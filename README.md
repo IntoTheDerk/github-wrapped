@@ -31,6 +31,8 @@ node scripts/render.mjs --input output/demo.json --output output/demo --formats 
 
 ## Use as an agent skill
 
+Detailed setup and real invocation checks: [Codex installation](docs/install/codex.md) · [Claude Code installation](docs/install/claude-code.md).
+
 Keep this checkout in a permanent location. Link the **whole checkout**, so the skill can find its scripts and installed dependencies:
 
 ```sh
@@ -47,7 +49,7 @@ Restart or refresh your agent's skill discovery if needed. In Codex invoke **`$g
 
 > Make my 2026 GitHub Wrapped with public and private activity. Exclude my employer's organization and forked repositories. Include commits and PRs, keep private project names anonymous, and export images, a PDF, and a video.
 
-The agent uses your existing authorized `gh` session. Private access depends on the token's repository permissions and organization SSO authorization; missing access cannot be reconstructed from the public graph.
+The agent uses your existing authorized `gh` session. Private access depends on the token's repository permissions and organization SSO authorization; missing access cannot be reconstructed from the public graph. If an authorized connected GitHub account can read private PRs while the CLI cannot read private contribution details, an agent can build a PR-only recap from fully paginated authored-PR search results. It must deduplicate URLs, retain the date/scope filters, omit unavailable metrics, and set `coverage.pull_request_search_only: true` so every export discloses that limitation.
 
 Installation conventions: [Codex skills](https://developers.openai.com/codex/skills), [Claude Code skills](https://code.claude.com/docs/en/skills).
 
@@ -106,6 +108,8 @@ The recap does not invent global percentiles, hours worked, code quality scores,
 Raw collection JSON can contain private repository names even when rendered cards anonymize them. Keep it local and out of Git. Anonymization hides labels; counts, dates, and project ordering may still reveal information. Review **every file you plan to share**. Output directories and credentials are ignored by Git.
 
 GitHub strings are treated as untrusted text. Exclusions are applied before output, and rendering escapes text rather than interpreting it as HTML. The project requests no write access to your activity repositories.
+
+[End-to-end Codex and Claude Code verification](docs/install/verification.md) documents real installation tests and their private-access limits.
 
 ## Development
 

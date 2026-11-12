@@ -1,7 +1,8 @@
 #!/usr/bin/env node
+import { realpathSync } from 'node:fs';
 import { chromium } from 'playwright';
 import {siGithub,siTypescript,siJavascript,siPython,siGo,siRust,siRuby,siSolana,siEthereum,siBitcoin,siReact,siDocker,siKubernetes,siTerraform,siClaude,siNodedotjs,siPostgresql} from 'simple-icons';
-import { readFile, writeFile, mkdir, mkdtemp, rm, access }  from 'node:fs/promises';
+import { readFile, writeFile, mkdir, mkdtemp, rm, access, chmod }  from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -28,7 +29,7 @@ export function sanitize(input, showPrivateNames = false) {
     metrics:Object.fromEntries(keys.filter(k => Object.hasOwn(input.metrics ?? {},k)).map(k => [k,count(input.metrics[k])])),
     repositories,monthly:Object.fromEntries(Object.entries(input.monthly ?? {}).filter(([k])=>/^\d{4}-\d{2}$/.test(k)).map(([k,v])=>[k,count(v)])),
     // Source notes can contain excluded identities. Use fixed disclosure copy instead.
-    notes:['Activity counts describe the selected data, not productivity, impact, or unique features shipped.',
+    notes:[...(input.coverage?.pull_request_search_only ? ['Private PR search only: commits, issues, and reviews are unavailable and omitted. PR creation counts use connected GitHub search, not the contribution calendar.'] : []),'Activity counts describe the selected data, not productivity, impact, or unique features shipped.',
       'GitHub permissions and contribution attribution can limit coverage. Repository rankings reflect captured contributions.',
       ...(input.coverage?.restricted_details_missing ? ['Some private activity was restricted by GitHub permissions and is omitted.'] : []),
       ...(input.coverage?.repository_limit_reached ? ['Repository-level results may be truncated by the GitHub API limit.'] : []),
@@ -115,7 +116,7 @@ export async function render({input,output,formats=['html','png','pdf','mp4'],sh
   await page.route('**/*',route=>route.abort());
   await page.setContent(html,{waitUntil:'load'});
   await page.emulateMedia({media:'print'});
-  if(formats.includes('pdf')) await page.pdf({path:path.join(output,'wrapped.pdf'),printBackground:true,preferCSSPageSize:true});
+  if(formats.includes('pdf')) {await page.pdf({path:path.join(output,'wrapped.pdf'),printBackground:true,preferCSSPageSize:true});await chmod(path.join(output,'wrapped.pdf'),0o600);}
   if(formats.includes('png') || formats.includes('mp4')) {
    const cards=page.locator('.card');
    for(let i=0;i<await cards.count();i++) await cards.nth(i).screenshot({path:path.join(scratch,`card-${String(i+1).padStart(2,'0')}.png`)});
@@ -124,12 +125,13 @@ export async function render({input,output,formats=['html','png','pdf','mp4'],sh
    }
    if(formats.includes('mp4')) {
     const result=spawnSync('ffmpeg',['-hide_banner','-loglevel','error','-n','-framerate','1/4','-i',path.join(scratch,'card-%02d.png'),'-vf',"scale=1120:1990,zoompan=z='min(zoom+0.00025,1.03)':x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':d=120:s=1080x1920:fps=30,format=yuv420p",'-c:v','libx264','-preset','fast','-crf','22','-movflags','+faststart',path.resolve(output,'wrapped.mp4')],{encoding:'utf8'});
+    if(!result.error && result.status===0) await chmod(path.resolve(output,'wrapped.mp4'),0o600);
     if(result.error || result.status!==0) throw new Error(`Video export failed: ${result.error?.message ?? result.stderr}. Install ffmpeg or omit mp4.`);
    }
   }
  } finally {await browser?.close();await rm(scratch,{recursive:true,force:true});}
 }
-if(process.argv[1] && import.meta.url===pathToFileURL(process.argv[1]).href) {
+if(process.argv[1] && import.meta.url===pathToFileURL(realpathSync(process.argv[1])).href) {
  const args=process.argv.slice(2);const options={};
  for(let i=0;i<args.length;i++){const a=args[i];if(a==='--show-private-names')options.showPrivateNames=true;else if(a==='--include-private-insights')options.includePrivateInsights=true;else if(a==='--no-branding')options.noBranding=true;else if(a==='--no-insights')options.noInsights=true;else if(['--input','--output','--formats','--insights'].includes(a)){if(!args[i+1] || args[i+1].startsWith('--'))throw new Error(`Missing value for ${a}`);options[a.slice(2)]=args[++i];}else if(a==='--help'){console.log('node scripts/render.mjs --input data.json --output output-dir [--formats html,png,pdf,mp4] [--show-private-names] [--insights insights.json] [--include-private-insights] [--no-insights] [--no-branding]');process.exit(0);}else throw new Error(`Unknown argument: ${a}`);}
  if(!options.input || !options.output)throw new Error('--input and --output are required');
