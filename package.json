@@ -1,0 +1,17 @@
+{
+  "name": "github-wrapped",
+  "version": "1.0.0",
+  "description": "Private-aware GitHub year-in-review stories for Codex, Claude Code, and GitHub Actions",
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "render": "node scripts/render.mjs"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "type": "module",
+  "dependencies": {
+    "playwright": "1.65.0",
+    "simple-icons": "16.37.0"
+  }
+}

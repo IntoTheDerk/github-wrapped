@@ -1,0 +1,97 @@
+name: GitHub Wrapped
+on:
+  workflow_dispatch:
+    inputs:
+      username:
+        description: GitHub username
+        required: true
+        type: string
+      year:
+        description: Calendar year (ignored when both date bounds supplied)
+        default: '2026'
+        type: string
+      from:
+        description: Optional inclusive start (YYYY-MM-DD; supply both bounds)
+        type: string
+      to:
+        description: Optional inclusive end (YYYY-MM-DD)
+        type: string
+      categories:
+        description: Comma-separated commits,prs,issues,reviews,repos
+        default: commits,prs,issues,reviews,repos
+        type: string
+      exclude_forks:
+        description: Exclude forked repositories
+        type: boolean
+        default: false
+      personalize:
+        description: Use configured AI provider (may incur provider charges)
+        type: boolean
+        default: false
+      include:
+        description: Optional repository glob (owner/name)
+        type: string
+      exclude:
+        description: Optional repository glob to exclude
+        type: string
+permissions:
+  contents: read
+jobs:
+  wrapped:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Collect public activity
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WRAPPED_USER: ${{ inputs.username }}
+          WRAPPED_YEAR: ${{ inputs.year }}
+          WRAPPED_FROM: ${{ inputs.from }}
+          WRAPPED_TO: ${{ inputs.to }}
+          WRAPPED_CATEGORIES: ${{ inputs.categories }}
+          WRAPPED_EXCLUDE_FORKS: ${{ inputs.exclude_forks }}
+          WRAPPED_INCLUDE: ${{ inputs.include }}
+          WRAPPED_EXCLUDE: ${{ inputs.exclude }}
+        shell: bash
+        run: |
+          args=(--username "$WRAPPED_USER" --include-context --scope public --categories "$WRAPPED_CATEGORIES" --output output/data.json)
+          if [[ "$WRAPPED_EXCLUDE_FORKS" == "true" ]]; then args+=(--exclude-forks); fi
+          if [[ -n "$WRAPPED_FROM" || -n "$WRAPPED_TO" ]]; then
+            args+=(--from "$WRAPPED_FROM" --to "$WRAPPED_TO")
+          else
+            args+=(--year "$WRAPPED_YEAR")
+          fi
+          if [[ -n "$WRAPPED_INCLUDE" ]]; then args+=(--include "$WRAPPED_INCLUDE"); fi
+          if [[ -n "$WRAPPED_EXCLUDE" ]]; then args+=(--exclude "$WRAPPED_EXCLUDE"); fi
+          python3 scripts/collect.py "${args[@]}"
+      - name: Optional AI personalization
+        if: inputs.personalize
+        env:
+          WRAPPED_AI_API_KEY: ${{ secrets.WRAPPED_AI_API_KEY }}
+          WRAPPED_AI_ENDPOINT: ${{ vars.WRAPPED_AI_ENDPOINT }}
+          WRAPPED_AI_MODEL: ${{ vars.WRAPPED_AI_MODEL }}
+        run: python3 scripts/personalize.py --input output/data.json --output output/insights.json --endpoint "$WRAPPED_AI_ENDPOINT" --model "$WRAPPED_AI_MODEL"
+      - name: Render recap
+        env:
+          PERSONALIZE: ${{ inputs.personalize }}
+        shell: bash
+        run: |
+          args=(--input output/data.json --output output/recap --formats html,png,pdf,mp4)
+          if [[ "$PERSONALIZE" == "true" ]]; then args+=(--insights output/insights.json); fi
+          node scripts/render.mjs "${args[@]}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: github-wrapped
+          path: output/recap/
+          retention-days: 7

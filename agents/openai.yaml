@@ -1,0 +1,4 @@
+interface:
+  display_name: "GitHub Wrapped"
+  short_description: "Turn GitHub activity into a visual year in review"
+  default_prompt: "Use $github-wrapped to make my GitHub year in review with story cards, PDF, and video."
